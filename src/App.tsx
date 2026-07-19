@@ -25,7 +25,9 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  Check
+  Check,
+  Search,
+  Users
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -109,6 +111,32 @@ export default function App() {
 
   // Copied log ID state for temporary "Copied!" feedback
   const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
+
+  // Search filter query for live execution logs
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+
+  // Group log entries by sender
+  const [groupBySender, setGroupBySender] = useState<boolean>(false);
+  // Expanded group IDs when grouping is enabled
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
+
+  const toggleGroupExpansion = (groupId: string) => {
+    setExpandedGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((item) => item !== groupId) : [...prev, groupId]
+    );
+  };
+
+  const handleToggleGroupBySender = () => {
+    const newGroupBySender = !groupBySender;
+    setGroupBySender(newGroupBySender);
+    if (newGroupBySender) {
+      // Auto expand all sender groups on activation
+      const keys = Array.from(new Set(filteredLogs.map(log => 
+        log.senderId !== undefined && log.senderId !== null ? String(log.senderId) : (log.senderName || 'Unknown')
+      )));
+      setExpandedGroupIds(keys);
+    }
+  };
 
   const copyLogToClipboard = (e: MouseEvent, logId: string, logContent: any) => {
     e.stopPropagation();
@@ -522,6 +550,58 @@ export default function App() {
       console.error(err);
     }
   };
+
+  // Filter logs based on search query
+  const filteredLogs = logs.filter(log => {
+    if (!logSearchQuery) return true;
+    const q = logSearchQuery.toLowerCase();
+    const nameMatch = (log.senderName || '').toLowerCase().includes(q);
+    const usernameMatch = (log.senderUsername || '').toLowerCase().includes(q);
+    const msgMatch = (log.incomingMessage || '').toLowerCase().includes(q);
+    const replyMatch = (log.replySent || '').toLowerCase().includes(q);
+    const ruleMatch = (log.matchedRuleDetails || '').toLowerCase().includes(q);
+    const errorMatch = (log.error || '').toLowerCase().includes(q);
+    const typeMatch = (log.matchedRuleType || '').toLowerCase().includes(q);
+    return nameMatch || usernameMatch || msgMatch || replyMatch || ruleMatch || errorMatch || typeMatch;
+  });
+
+  // Group logs by sender if active
+  const groupedLogsList = (() => {
+    if (!groupBySender) return [];
+    
+    const groupsMap = new Map<string, {
+      senderId: string | number;
+      senderName: string;
+      senderUsername?: string;
+      logs: AutoReplyLog[];
+      latestTimestamp: string;
+    }>();
+    
+    filteredLogs.forEach(log => {
+      const key = log.senderId !== undefined && log.senderId !== null ? String(log.senderId) : (log.senderName || 'Unknown');
+      
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          senderId: log.senderId,
+          senderName: log.senderName || 'Unknown Sender',
+          senderUsername: log.senderUsername,
+          logs: [],
+          latestTimestamp: log.timestamp
+        });
+      }
+      
+      const grp = groupsMap.get(key)!;
+      grp.logs.push(log);
+      
+      if (new Date(log.timestamp) > new Date(grp.latestTimestamp)) {
+        grp.latestTimestamp = log.timestamp;
+      }
+    });
+    
+    return Array.from(groupsMap.values()).sort((a, b) => 
+      new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime()
+    );
+  })();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-600 selection:text-white">
@@ -1201,6 +1281,18 @@ export default function App() {
                           {autoPoll ? 'Live Polling: ON' : 'Live Polling: OFF'}
                         </button>
                         <button
+                          onClick={handleToggleGroupBySender}
+                          title={groupBySender ? "Show chronological logs" : "Group logs by conversation thread sender"}
+                          className={`text-[10px] px-2.5 py-1.5 rounded-md border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            groupBySender 
+                              ? 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30 font-semibold' 
+                              : 'text-zinc-400 bg-zinc-850 border-zinc-700/60 hover:text-zinc-300 hover:bg-zinc-800'
+                          }`}
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          {groupBySender ? 'Grouped Senders' : 'Flat Feed'}
+                        </button>
+                        <button
                           onClick={handleDownloadJSON}
                           disabled={logs.length === 0}
                           title="Download logs as JSON file"
@@ -1225,6 +1317,28 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Search Input for filtering logs */}
+                    {logs.length > 0 && (
+                      <div className="relative mb-3">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Search logs by message, sender, username, rule or status..."
+                          value={logSearchQuery}
+                          onChange={(e) => setLogSearchQuery(e.target.value)}
+                          className="w-full bg-zinc-950/80 border border-zinc-800/80 rounded-xl pl-9 pr-8 py-2 text-xs text-zinc-300 placeholder-zinc-550 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-sans"
+                        />
+                        {logSearchQuery && (
+                          <button
+                            onClick={() => setLogSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-350 text-[10px] transition-colors cursor-pointer px-1 font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Logs terminal style display */}
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-h-[350px] overflow-y-auto scrollbar-thin">
                       {logs.length === 0 ? (
@@ -1233,101 +1347,247 @@ export default function App() {
                           <p className="text-sm">No transaction log entries found.</p>
                           <p className="text-xs mt-1">Activities logged instantly when a message hits your webhook or simulator.</p>
                         </div>
+                      ) : filteredLogs.length === 0 ? (
+                        <div className="text-center py-12 text-zinc-500">
+                          <Search className="w-8 h-8 mx-auto text-zinc-750 mb-2" />
+                          <p className="text-xs font-semibold">No logs found matching your filter.</p>
+                          <button
+                            onClick={() => setLogSearchQuery('')}
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 underline mt-1 cursor-pointer bg-transparent border-none"
+                          >
+                            Clear search query
+                          </button>
+                        </div>
                       ) : (
                         <div className="font-mono text-xs divide-y divide-zinc-900">
-                          {logs.map((log) => {
-                            const isExpanded = expandedLogIds.includes(log.id);
-                            return (
-                              <div
-                                key={log.id}
-                                onClick={() => toggleLogExpansion(log.id)}
-                                className="p-3 hover:bg-zinc-900/40 transition-all text-zinc-300 cursor-pointer select-none"
-                              >
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-zinc-600">
-                                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 inline" /> : <ChevronDown className="w-3.5 h-3.5 inline" />}
-                                      </span>
-                                      <span className="text-zinc-500">
-                                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                      </span>
-                                      <span className="text-white font-semibold">{log.senderName}</span>
-                                      {log.senderUsername && (
-                                        <span className="text-indigo-400 text-[10px]">@{log.senderUsername}</span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold ${
-                                        log.matchedRuleType === 'keyword' ? 'bg-emerald-950 text-emerald-400 border border-emerald-900' :
-                                        log.matchedRuleType === 'ai' ? 'bg-indigo-950/80 text-indigo-400 border border-indigo-900/50' :
-                                        'bg-zinc-800 text-zinc-500'
-                                      }`}>
-                                        {log.matchedRuleType === 'keyword' ? 'keyword' : log.matchedRuleType === 'ai' ? 'gemini ai' : 'none'}
-                                      </span>
-                                      {log.success ? (
-                                        <span className="text-emerald-400 font-bold" title="Message delivered successfully">✔</span>
-                                      ) : (
-                                        <span className="text-rose-500 font-bold" title={log.error || 'Ignored/Failed'}>✘</span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className="pl-5 border-l border-zinc-800 mt-1">
-                                    <div className="text-zinc-500 italic">Incoming: &quot;{log.incomingMessage}&quot;</div>
-                                    {log.replySent && (
-                                      <div className="text-zinc-300 mt-0.5">
-                                        <span className="text-indigo-500 mr-1">↳</span>Reply: {log.replySent}
-                                      </div>
-                                    )}
-                                    {log.error && (
-                                      <div className="text-rose-400/90 text-[10px] mt-0.5 flex items-center gap-1 font-sans">
-                                        <AlertCircle className="w-3 h-3 flex-shrink-0 text-rose-500" />
-                                        <span>Error: {log.error}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {isExpanded && (
+                          {groupBySender ? (
+                            groupedLogsList.map((group) => {
+                              const isGroupExpanded = expandedGroupIds.includes(String(group.senderId || group.senderName));
+                              return (
+                                <div key={String(group.senderId || group.senderName)} className="bg-zinc-950/20">
+                                  {/* Group Header Row */}
                                   <div
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="mt-3 pl-4 pr-3 py-2.5 bg-zinc-950 border border-zinc-800/80 rounded-lg text-[10px] font-mono text-zinc-400 space-y-2 overflow-x-auto cursor-text select-text"
+                                    onClick={() => toggleGroupExpansion(String(group.senderId || group.senderName))}
+                                    className="flex items-center justify-between p-3 bg-zinc-950 hover:bg-zinc-900/30 border-b border-zinc-900/40 transition-all cursor-pointer select-none"
                                   >
-                                    <div className="flex items-center justify-between border-b border-zinc-900 pb-1 mb-1.5 flex-wrap gap-2">
-                                      <span className="text-[10px] uppercase tracking-wider text-indigo-400 font-semibold flex items-center gap-1">
-                                        <Terminal className="w-3 h-3" /> Raw Transaction Payload
-                                      </span>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[9px] text-zinc-600">ID: {log.id}</span>
-                                        <button
-                                          onClick={(e) => copyLogToClipboard(e, log.id, log)}
-                                          className={`text-[10px] px-2 py-1 rounded border transition-all cursor-pointer flex items-center gap-1 font-sans ${
-                                            copiedLogId === log.id
-                                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-                                              : 'text-zinc-400 bg-zinc-900 border-zinc-800 hover:text-zinc-300 hover:bg-zinc-850'
-                                          }`}
-                                        >
-                                          {copiedLogId === log.id ? (
-                                            <>
-                                              <Check className="w-3 h-3 text-emerald-400" /> Copied!
-                                            </>
-                                          ) : (
-                                            <>
-                                              <Copy className="w-3 h-3" /> Copy Payload
-                                            </>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                                      <div className="flex flex-col">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-white font-bold text-xs">{group.senderName}</span>
+                                          {group.senderUsername && (
+                                            <span className="text-indigo-400 text-[10px]">@{group.senderUsername}</span>
                                           )}
-                                        </button>
+                                        </div>
+                                        <span className="text-[9px] text-zinc-500 mt-0.5">
+                                          Last active: {new Date(group.latestTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
                                       </div>
                                     </div>
-                                    <pre className="text-zinc-300 overflow-x-auto select-all max-h-[220px] overflow-y-auto scrollbar-thin whitespace-pre-wrap">
-                                      {JSON.stringify(log, null, 2)}
-                                    </pre>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-semibold">
+                                        {group.logs.length} {group.logs.length === 1 ? 'msg' : 'msgs'}
+                                      </span>
+                                      {isGroupExpanded ? (
+                                        <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
+                                      ) : (
+                                        <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                                      )}
+                                    </div>
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
+
+                                  {/* Group Log List */}
+                                  {isGroupExpanded && (
+                                    <div className="bg-zinc-950/50 pl-4 border-l-2 border-indigo-500/20 divide-y divide-zinc-900/60">
+                                      {group.logs.map((log) => {
+                                        const isExpanded = expandedLogIds.includes(log.id);
+                                        return (
+                                          <div
+                                            key={log.id}
+                                            onClick={() => toggleLogExpansion(log.id)}
+                                            className="p-3 hover:bg-zinc-900/30 transition-all text-zinc-300 cursor-pointer select-none"
+                                          >
+                                            <div className="space-y-1">
+                                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-zinc-650">
+                                                    {isExpanded ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />}
+                                                  </span>
+                                                  <span className="text-zinc-500 text-[10px]">
+                                                    {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-semibold ${
+                                                    log.matchedRuleType === 'keyword' ? 'bg-emerald-950 text-emerald-400 border border-emerald-900' :
+                                                    log.matchedRuleType === 'ai' ? 'bg-indigo-950/80 text-indigo-400 border border-indigo-900/50' :
+                                                    'bg-zinc-800 text-zinc-500'
+                                                  }`}>
+                                                    {log.matchedRuleType === 'keyword' ? 'keyword' : log.matchedRuleType === 'ai' ? 'gemini ai' : 'none'}
+                                                  </span>
+                                                  {log.success ? (
+                                                    <span className="text-emerald-400 font-bold" title="Message delivered successfully">✔</span>
+                                                  ) : (
+                                                    <span className="text-rose-500 font-bold" title={log.error || 'Ignored/Failed'}>✘</span>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              <div className="pl-4 border-l border-zinc-850 mt-1">
+                                                <div className="text-zinc-500 italic">Incoming: &quot;{log.incomingMessage}&quot;</div>
+                                                {log.replySent && (
+                                                  <div className="text-zinc-300 mt-0.5">
+                                                    <span className="text-indigo-500 mr-1">↳</span>Reply: {log.replySent}
+                                                  </div>
+                                                )}
+                                                {log.error && (
+                                                  <div className="text-rose-400/90 text-[10px] mt-0.5 flex items-center gap-1 font-sans">
+                                                    <AlertCircle className="w-3 h-3 flex-shrink-0 text-rose-500" />
+                                                    <span>Error: {log.error}</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+
+                                            {isExpanded && (
+                                              <div
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="mt-3 pl-4 pr-3 py-2.5 bg-zinc-950 border border-zinc-800/80 rounded-lg text-[10px] font-mono text-zinc-400 space-y-2 overflow-x-auto cursor-text select-text"
+                                              >
+                                                <div className="flex items-center justify-between border-b border-zinc-900 pb-1 mb-1.5 flex-wrap gap-2">
+                                                  <span className="text-[10px] uppercase tracking-wider text-indigo-400 font-semibold flex items-center gap-1">
+                                                    <Terminal className="w-3 h-3" /> Raw Transaction Payload
+                                                  </span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-[9px] text-zinc-650">ID: {log.id}</span>
+                                                    <button
+                                                      onClick={(e) => copyLogToClipboard(e, log.id, log)}
+                                                      className={`text-[10px] px-2 py-1 rounded border transition-all cursor-pointer flex items-center gap-1 font-sans ${
+                                                        copiedLogId === log.id
+                                                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                                          : 'text-zinc-400 bg-zinc-900 border-zinc-800 hover:text-zinc-300 hover:bg-zinc-850'
+                                                      }`}
+                                                    >
+                                                      {copiedLogId === log.id ? (
+                                                        <>
+                                                          <Check className="w-3 h-3 text-emerald-400" /> Copied!
+                                                        </>
+                                                      ) : (
+                                                        <>
+                                                          <Copy className="w-3 h-3" /> Copy Payload
+                                                        </>
+                                                      )}
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                                <pre className="text-zinc-300 overflow-x-auto select-all max-h-[220px] overflow-y-auto scrollbar-thin whitespace-pre-wrap">
+                                                  {JSON.stringify(log, null, 2)}
+                                                </pre>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            filteredLogs.map((log) => {
+                              const isExpanded = expandedLogIds.includes(log.id);
+                              return (
+                                <div
+                                  key={log.id}
+                                  onClick={() => toggleLogExpansion(log.id)}
+                                  className="p-3 hover:bg-zinc-900/40 transition-all text-zinc-300 cursor-pointer select-none"
+                                >
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-zinc-600">
+                                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5 inline" /> : <ChevronDown className="w-3.5 h-3.5 inline" />}
+                                        </span>
+                                        <span className="text-zinc-500">
+                                          {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
+                                        <span className="text-white font-semibold">{log.senderName}</span>
+                                        {log.senderUsername && (
+                                          <span className="text-indigo-400 text-[10px]">@{log.senderUsername}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold ${
+                                          log.matchedRuleType === 'keyword' ? 'bg-emerald-950 text-emerald-400 border border-emerald-900' :
+                                          log.matchedRuleType === 'ai' ? 'bg-indigo-950/80 text-indigo-400 border border-indigo-900/50' :
+                                          'bg-zinc-800 text-zinc-500'
+                                        }`}>
+                                          {log.matchedRuleType === 'keyword' ? 'keyword' : log.matchedRuleType === 'ai' ? 'gemini ai' : 'none'}
+                                        </span>
+                                        {log.success ? (
+                                          <span className="text-emerald-400 font-bold" title="Message delivered successfully">✔</span>
+                                        ) : (
+                                          <span className="text-rose-500 font-bold" title={log.error || 'Ignored/Failed'}>✘</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="pl-5 border-l border-zinc-800 mt-1">
+                                      <div className="text-zinc-500 italic">Incoming: &quot;{log.incomingMessage}&quot;</div>
+                                      {log.replySent && (
+                                        <div className="text-zinc-300 mt-0.5">
+                                          <span className="text-indigo-500 mr-1">↳</span>Reply: {log.replySent}
+                                        </div>
+                                      )}
+                                      {log.error && (
+                                        <div className="text-rose-400/90 text-[10px] mt-0.5 flex items-center gap-1 font-sans">
+                                          <AlertCircle className="w-3 h-3 flex-shrink-0 text-rose-500" />
+                                          <span>Error: {log.error}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {isExpanded && (
+                                    <div
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="mt-3 pl-4 pr-3 py-2.5 bg-zinc-950 border border-zinc-800/80 rounded-lg text-[10px] font-mono text-zinc-400 space-y-2 overflow-x-auto cursor-text select-text"
+                                    >
+                                      <div className="flex items-center justify-between border-b border-zinc-900 pb-1 mb-1.5 flex-wrap gap-2">
+                                        <span className="text-[10px] uppercase tracking-wider text-indigo-400 font-semibold flex items-center gap-1">
+                                          <Terminal className="w-3 h-3" /> Raw Transaction Payload
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[9px] text-zinc-650">ID: {log.id}</span>
+                                          <button
+                                            onClick={(e) => copyLogToClipboard(e, log.id, log)}
+                                            className={`text-[10px] px-2 py-1 rounded border transition-all cursor-pointer flex items-center gap-1 font-sans ${
+                                              copiedLogId === log.id
+                                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                                : 'text-zinc-400 bg-zinc-900 border-zinc-800 hover:text-zinc-300 hover:bg-zinc-850'
+                                            }`}
+                                          >
+                                            {copiedLogId === log.id ? (
+                                              <>
+                                                <Check className="w-3 h-3 text-emerald-400" /> Copied!
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Copy className="w-3 h-3" /> Copy Payload
+                                              </>
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <pre className="text-zinc-300 overflow-x-auto select-all max-h-[220px] overflow-y-auto scrollbar-thin whitespace-pre-wrap">
+                                        {JSON.stringify(log, null, 2)}
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
                         </div>
                       )}
                     </div>
