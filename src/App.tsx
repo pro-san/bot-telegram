@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent, MouseEvent } from 'react';
 import {
   Bot,
   Send,
@@ -23,7 +23,9 @@ import {
   Info,
   Download,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Copy,
+  Check
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -102,6 +104,22 @@ export default function App() {
   // Expanded log IDs for execution logs detail view
   const [expandedLogIds, setExpandedLogIds] = useState<string[]>([]);
 
+  // Auto-polling state for keeping logs and stats updated
+  const [autoPoll, setAutoPoll] = useState<boolean>(false);
+
+  // Copied log ID state for temporary "Copied!" feedback
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
+
+  const copyLogToClipboard = (e: MouseEvent, logId: string, logContent: any) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(JSON.stringify(logContent, null, 2)).then(() => {
+      setCopiedLogId(logId);
+      setTimeout(() => setCopiedLogId(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
+  };
+
   // Scroll ref for chat simulator
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -112,13 +130,15 @@ export default function App() {
   };
 
   // Fetch initial dashboard state
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch('/api/dashboard');
       if (res.ok) {
         const data = await res.json();
-        setConfig(data.config);
+        if (!silent) {
+          setConfig(data.config);
+        }
         setRules(data.rules);
         setLogs(data.logs);
         setStats(data.stats);
@@ -126,15 +146,28 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
-      showBanner('Failed to load bot server data. Ensure the server is running.', 'error');
+      if (!silent) {
+        showBanner('Failed to load bot server data. Ensure the server is running.', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  // Interval hook for auto-polling logs/stats every 5 seconds
+  useEffect(() => {
+    if (!autoPoll) return;
+
+    const interval = setInterval(() => {
+      fetchDashboardData(true);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [autoPoll]);
 
   // Auto-scroll sandbox chat
   useEffect(() => {
@@ -1156,6 +1189,18 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => setAutoPoll(!autoPoll)}
+                          title={autoPoll ? "Disable auto polling" : "Enable 5s auto polling"}
+                          className={`text-[10px] px-2.5 py-1.5 rounded-md border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            autoPoll 
+                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30 font-semibold' 
+                              : 'text-zinc-400 bg-zinc-850 border-zinc-700/60 hover:text-zinc-300 hover:bg-zinc-800'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${autoPoll ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                          {autoPoll ? 'Live Polling: ON' : 'Live Polling: OFF'}
+                        </button>
+                        <button
                           onClick={handleDownloadJSON}
                           disabled={logs.length === 0}
                           title="Download logs as JSON file"
@@ -1249,11 +1294,31 @@ export default function App() {
                                     onClick={(e) => e.stopPropagation()}
                                     className="mt-3 pl-4 pr-3 py-2.5 bg-zinc-950 border border-zinc-800/80 rounded-lg text-[10px] font-mono text-zinc-400 space-y-2 overflow-x-auto cursor-text select-text"
                                   >
-                                    <div className="flex items-center justify-between border-b border-zinc-900 pb-1 mb-1.5">
+                                    <div className="flex items-center justify-between border-b border-zinc-900 pb-1 mb-1.5 flex-wrap gap-2">
                                       <span className="text-[10px] uppercase tracking-wider text-indigo-400 font-semibold flex items-center gap-1">
                                         <Terminal className="w-3 h-3" /> Raw Transaction Payload
                                       </span>
-                                      <span className="text-[9px] text-zinc-600">ID: {log.id}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[9px] text-zinc-600">ID: {log.id}</span>
+                                        <button
+                                          onClick={(e) => copyLogToClipboard(e, log.id, log)}
+                                          className={`text-[10px] px-2 py-1 rounded border transition-all cursor-pointer flex items-center gap-1 font-sans ${
+                                            copiedLogId === log.id
+                                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                              : 'text-zinc-400 bg-zinc-900 border-zinc-800 hover:text-zinc-300 hover:bg-zinc-850'
+                                          }`}
+                                        >
+                                          {copiedLogId === log.id ? (
+                                            <>
+                                              <Check className="w-3 h-3 text-emerald-400" /> Copied!
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Copy className="w-3 h-3" /> Copy Payload
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
                                     </div>
                                     <pre className="text-zinc-300 overflow-x-auto select-all max-h-[220px] overflow-y-auto scrollbar-thin whitespace-pre-wrap">
                                       {JSON.stringify(log, null, 2)}
