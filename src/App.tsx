@@ -115,6 +115,9 @@ export default function App() {
   // Search filter query for live execution logs
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
 
+  // Export dropdown state for logs download choice
+  const [exportDropdownOpen, setExportDropdownOpen] = useState<boolean>(false);
+
   // Group log entries by sender
   const [groupBySender, setGroupBySender] = useState<boolean>(false);
   // Expanded group IDs when grouping is enabled
@@ -1292,22 +1295,48 @@ export default function App() {
                           <Users className="w-3.5 h-3.5" />
                           {groupBySender ? 'Grouped Senders' : 'Flat Feed'}
                         </button>
-                        <button
-                          onClick={handleDownloadJSON}
-                          disabled={logs.length === 0}
-                          title="Download logs as JSON file"
-                          className="text-[10px] text-zinc-300 hover:text-white bg-zinc-800 px-2.5 py-1.5 rounded-md border border-zinc-700/60 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Download className="w-3 h-3" /> JSON
-                        </button>
-                        <button
-                          onClick={handleDownloadCSV}
-                          disabled={logs.length === 0}
-                          title="Download logs as CSV file"
-                          className="text-[10px] text-zinc-300 hover:text-white bg-zinc-800 px-2.5 py-1.5 rounded-md border border-zinc-700/60 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Download className="w-3 h-3" /> CSV
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                            disabled={logs.length === 0}
+                            title="Export logs as JSON or CSV"
+                            className="text-[10px] text-zinc-300 hover:text-white bg-zinc-800 px-2.5 py-1.5 rounded-md border border-zinc-700/60 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Download className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Export Logs</span>
+                            <ChevronDown className="w-3 h-3 text-zinc-500" />
+                          </button>
+                          {exportDropdownOpen && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-10" 
+                                onClick={() => setExportDropdownOpen(false)} 
+                              />
+                              <div className="absolute right-0 mt-1.5 w-36 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-20 font-sans">
+                                <button
+                                  onClick={() => {
+                                    handleDownloadJSON();
+                                    setExportDropdownOpen(false);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                  Export as JSON
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDownloadCSV();
+                                    setExportDropdownOpen(false);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  Export as CSV
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <button
                           onClick={handleClearLogs}
                           className="text-[10px] text-rose-400 hover:text-rose-300 bg-rose-500/5 px-2.5 py-1.5 rounded-md border border-rose-500/20 transition-all cursor-pointer"
