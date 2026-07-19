@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Auto-Reply Bot",
+  "description": "Configure, simulate, and host a Telegram auto-reply bot using customizable keyword rules and AI-powered Gemini conversations. Includes live logs, statistics, and a test sandbox.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
