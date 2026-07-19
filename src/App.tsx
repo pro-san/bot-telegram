@@ -37,6 +37,21 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { BotConfig, KeywordRule, AutoReplyLog, BotStats } from './types';
 
+const PERSONALITY_TEMPLATES = [
+  {
+    name: 'Formal Support',
+    value: 'You are a professional customer support assistant for a business. Keep your replies friendly, polite, informative, and structured. Answer customer queries with complete sentences, avoiding slang and keeping a polished business tone.'
+  },
+  {
+    name: 'Casual / Friendly',
+    value: 'You are a warm, casual, and incredibly friendly support assistant. Speak to users as if they are your close friends! Use occasional relevant emojis, keep things lighthearted and supportive, and make sure they feel welcome.'
+  },
+  {
+    name: 'Concise Expert',
+    value: 'You are an expert technical support assistant. Provide extremely direct, highly concise, and accurate answers. Do not waste words on pleasantries; get straight to the point and provide actionable, clear steps.'
+  }
+];
+
 export default function App() {
   // Config state
   const [config, setConfig] = useState<BotConfig>({
@@ -644,7 +659,7 @@ export default function App() {
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
-                          className="space-y-2 border-t border-zinc-800/60 pt-4"
+                          className="space-y-3 border-t border-zinc-800/60 pt-4"
                         >
                           <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
                             <span className="flex items-center gap-1.5">
@@ -662,6 +677,32 @@ export default function App() {
                               </p>
                             </div>
                           )}
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl">
+                            <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                              Apply Personality Template:
+                            </span>
+                            <select
+                              value={
+                                PERSONALITY_TEMPLATES.find(t => t.value === config.systemInstruction)?.value || ""
+                              }
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  setConfig({ ...config, systemInstruction: e.target.value });
+                                  showBanner(`Applied '${PERSONALITY_TEMPLATES.find(t => t.value === e.target.value)?.name}' template.`, 'success');
+                                }
+                              }}
+                              className="bg-zinc-900 text-zinc-300 text-xs rounded-lg border border-zinc-800 px-2.5 py-1.5 focus:outline-none focus:border-indigo-500/80 transition-all cursor-pointer min-w-[150px] font-medium"
+                            >
+                              <option value="" disabled>-- Select a template --</option>
+                              {PERSONALITY_TEMPLATES.map((template) => (
+                                <option key={template.name} value={template.value}>
+                                  {template.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
                           <textarea
                             placeholder="e.g. You are a tech-savvy support bot for a software product. Be helpful, concise, and use occasional emojis."
